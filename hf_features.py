@@ -286,12 +286,6 @@ def corr_map(df, fname):
     plt.savefig('{0}.jpg'.format(fname))
 
 
-
-
-
-
-
-
 def main():
     test_sample = get_samples(mode=0, total_num=30)
     start_date = '20191202'
@@ -316,6 +310,4 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    df = load_features()
-    print(df.shape)
+    main()
