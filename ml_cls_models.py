@@ -51,7 +51,7 @@ def load_features(all_features=False, security_id=None):
         if item.endswith('csv') and 'corr' not in item and (not security_id or (security_id in item)):
             _df = pd.read_csv('data/{0}'.format(item))
             # index, exchangeCD, ticker, dataDate
-            # barTime: 改成第几分钟
+            # barTime: change to the offset minutes since the market start, and the relative time span in the day
             bar_time_lst = _df['barTime']
             label5 = _df['label5']
             _df.drop(

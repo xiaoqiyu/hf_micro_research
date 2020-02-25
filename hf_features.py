@@ -11,6 +11,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 import uqer
 from uqer import DataAPI
 import seaborn as sns
@@ -131,6 +132,7 @@ def _cal_min_features(df_min, window_len=20):
         return ret
 
     df_min['ret'] = df_min[['closePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1)
+    df_min['retLog'] = df_min[['closePrice']].rolling(2).apply(lambda x: math.log(x[-1]) - math.log(x[0]))
     df_min['retVar'] = df_min[['ret']].rolling(window_len).apply(lambda x: x.var())
     df_min['retSkr'] = df_min[['ret']].rolling(window_len).apply(_get_skr)
     df_min['retKur'] = df_min[['ret']].rolling(window_len).apply(_get_kur)
@@ -146,6 +148,7 @@ def _cal_min_features(df_min, window_len=20):
     df_min['maDiff20'] = df_min['ma5'] - df_min['ma20']
     df_min['maDiff10'] = df_min['ma5'] - df_min['ma10']
     df_min['priceAmp'] = (df_min['highPrice'] - df_min['lowPrice']) / df_min['closePrice']
+    df_min['sIndicator'] = abs(df_min['ret']) / np.sqrt(df_min['totalVolume'])
 
 
 def get_features(security_id=u"300634.XSHE", start_date='20191202', end_date='20191206', min_unit="1", tick=False,
