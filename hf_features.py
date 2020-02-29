@@ -7,7 +7,6 @@
 @time: 19-11-15 下午4:03
 @desc:
 '''
-import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,7 +15,7 @@ import uqer
 from uqer import DataAPI
 import seaborn as sns
 from gen_sample import get_samples
-from logger import Logger
+from utils.logger import Logger
 
 sns.set()
 logger = Logger().get_log()

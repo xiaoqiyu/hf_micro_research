@@ -54,9 +54,10 @@ def get_samples(mode=0, *arge, **kwargs):
 
 
 if __name__ == "__main__":
-    ret = get_samples(0)
+    ret = get_samples(0, total_num=30)
     lst = []
+    pprint.pprint(ret)
     for k, v in ret.items():
         lst.extend(v)
-    print(len(lst), len(set(lst)))
-    pprint.pprint(ret)
+    # print(len(lst), len(set(lst)))
+    # pprint.pprint(ret)
