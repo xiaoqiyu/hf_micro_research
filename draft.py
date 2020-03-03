@@ -62,5 +62,5 @@ def query_daily_reports(query_suffix="QueryCurRptList", mode='r', date=None):
 
 if __name__ == '__main__':
     # place_order(security_id='000001.SZ', order_vol=30000, side='2', price=14.50, biz_action=2)
-    ret = query_daily_reports(query_suffix="QueryCurOrdList", mode='w')
+    ret = query_daily_reports(query_suffix="QuerySecurityAssetsList", mode='r', date='20200228')
     pprint.pprint(ret)
