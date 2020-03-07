@@ -14,7 +14,7 @@ import math
 import uqer
 from uqer import DataAPI
 import seaborn as sns
-from gen_sample import get_samples
+from data_processing.gen_sample import get_samples
 from utils.logger import Logger
 
 sns.set()
@@ -179,6 +179,14 @@ def get_features(security_id=u"300634.XSHE", start_date='20191202', end_date='20
 
 def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="1", tick=False, df_min=None,
                          df_bc_min=None):
+    '''
+    Example call:
+    -get tick level features:
+        get_features_by_date(security_id=u"ticker.mkt", date='yyyymmdd', min_unit="1", tick=True)
+    -get min level features:
+        get_features_by_date(security_id=u"ticker.mkt", date='yyyymmdd', min_unit="1", tick=False, df_min=xx,df_bc_min=xx)
+
+    '''
     logger.info('Start processing sec id:{0} for  date:{1}'.format(security_id, date))
     df = DataAPI.MktTicksHistOneDayGet(securityID=security_id, date=date.replace('-', ''), startSecOffset="",
                                        endSecOffset="",
@@ -191,10 +199,14 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
     data_min = ['{0}:{1}'.format(item.split(':')[0], item.split(':')[1]) for item in datatimes]
     # tick feature calculation
     df['barTime'] = data_min
+    _cal_tick_features(df)
+    if tick:
+        return df
+
     df_min['vwap'] = df_min['totalValue'] / df_min['totalVolume']
     df_min['bcClosePrice'] = df_bc_min['closePrice']
     # calculate tick level features
-    _cal_tick_features(df)
+
     # calculate min features accumulate from tick level
     df_agg = _cal_min_features_by_ticks(df)
 
@@ -229,6 +241,7 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
     if not tick:
         return df_min
     else:
+        # TODO refactor this session, this is to generate train_x and train_y for time series models(RNN)
         min_vwap = list(df_min['vwap'])
         min_vwap.insert(0, min_vwap[0])
         df_min['ret'] = (df_min['vwap'] / min_vwap[:-1] - 1) * 100
@@ -312,4 +325,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
+    print(df.shape)

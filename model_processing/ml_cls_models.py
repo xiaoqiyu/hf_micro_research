@@ -41,7 +41,7 @@ def _get_min(bartime_lst):
 
 
 def load_features(all_features=False, security_id=None):
-    ret = os.listdir('data/')
+    ret = os.listdir('../data/')
     lst = []
     for item in ret:
         if item.endswith('csv') and 'corr' not in item and (not security_id or (security_id in item)):
