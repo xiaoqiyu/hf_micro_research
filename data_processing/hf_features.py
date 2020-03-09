@@ -302,9 +302,10 @@ def corr_map(df, fname):
 
 
 def main():
-    test_sample = get_samples(mode=0, total_num=30)
+    # test_sample = get_samples(mode=0, total_num=30)
+    test_sample = {'399005.XSHE': ['002180.XSHE']}
     start_date = '20191202'
-    end_date = '20191227'
+    end_date = '20191205'
     for k, v in test_sample.items():
         for sec_id in v:
             df = get_features(security_id=sec_id, start_date=start_date, end_date=end_date, min_unit="1", tick=False,
@@ -312,7 +313,8 @@ def main():
             if not type(df) == pd.DataFrame:
                 logger.info('Exception for calculating features for sec_id:{0} in bc:{1}'.format(sec_id, k))
                 continue
-            fname = "data/{0}_{1}_{2}".format(sec_id, start_date, end_date)
+            # fname = "data/{0}_{1}_{2}".format(sec_id, start_date, end_date)
+            fname = "{0}_{1}_{2}".format(sec_id, start_date, end_date)
             df.to_csv('{0}.csv'.format(fname), index=False)
             df.drop(['exchangeCD', 'ticker'], axis=1, inplace=True)
             df_corr = df.corr(method='pearson')
@@ -325,6 +327,6 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
-    print(df.shape)
+    main()
+    # df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
+    # print(df.shape)
