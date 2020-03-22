@@ -56,13 +56,11 @@ def get_features(security_id=u"300634.XSHE", date='20191122'):
     df['totalBidVolume'] = df['bidVolume1'] + df['bidVolume2'] + df['bidVolume3'] + df['bidVolume4'] + df['bidVolume5']
     df['volumeImbalance1'] = (df['askVolume1'] - df['bidVolume1']) / (df['askVolume1'] + df['bidVolume1'])
     df['volumeImbalanceTotal'] = (df['totalAskVolume'] - df['totalBidVolume']) / (
-        df['totalAskVolume'] + df['totalBidVolume'])
+            df['totalAskVolume'] + df['totalBidVolume'])
     df['volumePerDeal'] = df['volume'] / df['deal']
     df['volumeRatio'] = df['volume'] / total_vol
 
-    #min acc features by tick
-
-
+    # min acc features by tick
 
     int(list(set(df['dataMin']))[0].split(':')[1]) % 5
     # print(df.shape)
@@ -228,9 +226,11 @@ def rnn_reg_training(start_date='', end_date='', security_id=''):
             plt.text(0.5, 0, 'loss={0},step={1}'.format(loss.data.numpy(), step), fontdict={'size': 20, 'color': 'red'})
             plt.pause(0.5)
 
+
 def test():
-    df = pd.DataFrame({"k1":list("abab"),"d1":[1,2,3,4],"d2":[5,6,7,8]})
+    df = pd.DataFrame({"k1": list("abab"), "d1": [1, 2, 3, 4], "d2": [5, 6, 7, 8]})
     print(df)
+
 
 if __name__ == '__main__':
     # rnn_reg_training(start_date='20191203', end_date='20191218', security_id='000001.XSHE')

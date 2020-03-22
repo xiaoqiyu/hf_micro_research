@@ -12,10 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 import uqer
+import pprint
 from uqer import DataAPI
 import seaborn as sns
 from data_processing.gen_sample import get_samples
 from utils.logger import Logger
+from utils.helper import get_full_data_path
 
 sns.set()
 logger = Logger().get_log()
@@ -137,25 +139,25 @@ def _cal_min_features(df_min, window_len=20):
     df_min['retKur'] = df_min[['ret']].rolling(window_len).apply(_get_kur)
     df_min['retAc'] = df_min[['ret']].rolling(window_len).apply(_get_ac, kwargs={'step': 5})
     df_min['retBc'] = df_min[['bcClosePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1)
-    df_min['corrBc'] = _get_rolling_corr(df_min['ret'], df_min['retBc'], window_len=20)
+    df_min['corrBc'] = _get_rolling_corr(df_min['ret'], df_min['retBc'], window_len=window_len)
     df_min['label'] = ([0.0] + list(df_min['ret']))[1:]
     df_min['label5'] = _get_label_5min(df_min['closePrice'])
     df_min['retTrackBc'] = df_min['ret'] - df_min['retBc']
     df_min['ma5'] = df_min[['closePrice']].rolling(5).mean()
     df_min['ma10'] = df_min[['closePrice']].rolling(10).mean()
-    df_min['ma20'] = df_min[['closePrice']].rolling(20).mean()
-    df_min['maDiff20'] = df_min['ma5'] - df_min['ma20']
+    # df_min['ma20'] = df_min[['closePrice']].rolling(20).mean()
+    # df_min['maDiff20'] = df_min['ma5'] - df_min['ma20']
     df_min['maDiff10'] = df_min['ma5'] - df_min['ma10']
     df_min['priceAmp'] = (df_min['highPrice'] - df_min['lowPrice']) / df_min['closePrice']
     df_min['sIndicator'] = abs(df_min['ret']) / np.sqrt(df_min['totalVolume'])
 
 
 def get_features(security_id=u"300634.XSHE", start_date='20191202', end_date='20191206', min_unit="1", tick=False,
-                 bc=''):
+                 bc='', win_len=20):
     df = DataAPI.TradeCalGet(exchangeCD=u"XSHG,XSHE", beginDate=start_date.replace('-', ''),
                              endDate=end_date.replace('-', ''), isOpen=u"1",
                              field=u"calendarDate", pandas="1")
-    t_dates = list(df['calendarDate'])
+    t_dates = list(set(df['calendarDate']))
     df_min = DataAPI.MktBarHistDateRangeGet(securityID=security_id, startDate=start_date.replace('-', ''),
                                             endDate=end_date.replace('-', ''),
                                             unit=min_unit, field=u"", pandas="1")
@@ -167,7 +169,7 @@ def get_features(security_id=u"300634.XSHE", start_date='20191202', end_date='20
         _df_min = df_min[df_min.dataDate == date]
         _df_bc_min = df_bc_min[df_bc_min.dataDate == date]
         _df = get_features_by_date(security_id=security_id, date=date, min_unit=min_unit, tick=tick, df_min=_df_min,
-                                   df_bc_min=_df_bc_min)
+                                   df_bc_min=_df_bc_min, win_len=win_len)
         lst.append(_df)
     try:
         ret = pd.concat(lst, axis=0)
@@ -178,7 +180,7 @@ def get_features(security_id=u"300634.XSHE", start_date='20191202', end_date='20
 
 
 def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="1", tick=False, df_min=None,
-                         df_bc_min=None):
+                         df_bc_min=None, win_len=20):
     '''
     Example call:
     -get tick level features:
@@ -211,7 +213,7 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
     df_agg = _cal_min_features_by_ticks(df)
 
     # calculate min level features
-    _cal_min_features(df_min, 20)
+    _cal_min_features(df_min, win_len)
 
     common_min_lst = set(df_min['barTime']).intersection(set(data_min))
     df_min = df_min[df_min['barTime'].isin(common_min_lst)].sort_values(by='barTime', ascending=True)
@@ -298,35 +300,89 @@ def corr_map(df, fname):
                 , square=True, linewidths=.5, cbar_kws={"shrink": .5}
                 , annot=False, annot_kws={'size': 5, 'weight': 'bold', 'color': 'red'})
     # plt.show()
-    plt.savefig('{0}.jpg'.format(fname))
+    plt.savefig(get_full_data_path('{0}.jpg'.format(fname)))
+
+
+def cache_features(start_date='20200302', end_date='20200313', sec_num=30):
+    test_sample = get_samples(mode=0, total_num=sec_num)
+    # test_sample = {'399005.XSHE': ['002180.XSHE']}
+    for win_len in [10]:
+        for k, v in test_sample.items():
+            for sec_id in v:
+                df = get_features(security_id=sec_id, start_date=start_date, end_date=end_date, min_unit="1",
+                                  tick=False,
+                                  bc=k, win_len=win_len)
+                if not type(df) == pd.DataFrame:
+                    logger.info('Exception for calculating features for sec_id:{0} in bc:{1}'.format(sec_id, k))
+                    continue
+                fname = "{0}_{1}_{2}_{3}".format(sec_id, start_date, end_date, win_len)
+                # fname = "{0}_{1}_{2}".format(sec_id, start_date, end_date)
+                df.to_csv(get_full_data_path('{0}.csv'.format(fname)), index=False)
+                df.drop(['exchangeCD', 'ticker'], axis=1, inplace=True)
+                df_corr = df.corr(method='pearson')
+                df_corr.to_csv(get_full_data_path('{0}_corr.csv'.format(fname)), index=False)
+                label = df_corr['label']
+                label5 = df_corr['label5']
+                df_corr.drop(['label', 'label5', 'index'], axis=1, inplace=True)
+                _df1 = pd.DataFrame({'label': label})
+                df_corr1 = pd.concat([_df1, df_corr], axis=1)
+                corr_map(df_corr1, fname='{0}_{1}'.format(fname, '1min'))
+
+                _df5 = pd.DataFrame({'label': label5})
+                df_corr5 = pd.concat([_df5, df_corr], axis=1)
+                corr_map(df_corr5, fname='{0}_{1}'.format(fname, '5min'))
+                # FIXME remove hardcode
+                break
+            # FIXME remvoe hardcode
+            break
+
+
+def windows_len_search():
+    target_features = ['retVar', 'retSkr', 'retKur', 'retAc', 'retBc', 'corrBc', 'ma5', 'ma10', 'ma20']
+    for l in [10, 15, 20]:
+        ret = dict()
+        f_name = '002415.XSHE_20200302_20200313_{0}_corr.csv'.format(l)
+        df = pd.read_csv(get_full_data_path(f_name))
+        col_names = list(df.columns)
+
+        # labels = df['label']
+        labels = df['label5']
+        dict_corr = dict(zip(col_names, labels))
+        for f in target_features:
+            ret.update({f: dict_corr.get(f)})
+        print("window len:", l)
+        pprint.pprint(ret)
+
+
+def get_month_start_end_dates(start_date='', end_date=''):
+    df = DataAPI.TradeCalGet(exchangeCD=u"XSHG,XSHE", beginDate=start_date, endDate=end_date, isOpen=u"1",
+                             field=u"", pandas="1")
+    t_dates = list(set(df['calendarDate']))
+    t_dates = sorted(t_dates)
+    df = df[df.isMonthEnd == 1]
+    t_month_end = list(set(df['calendarDate']))
+    t_month_end = sorted(t_month_end)
+    ret = [t_dates[0]]
+    for d in t_month_end:
+        try:
+            _idx = t_dates.index(d)
+            ret.append(d)
+            ret.append(t_dates[_idx + 1])
+        except Exception as ex:
+            pass
+    return ret
 
 
 def main():
-    # test_sample = get_samples(mode=0, total_num=30)
-    test_sample = {'399005.XSHE': ['002180.XSHE']}
-    start_date = '20191202'
-    end_date = '20191205'
-    for k, v in test_sample.items():
-        for sec_id in v:
-            df = get_features(security_id=sec_id, start_date=start_date, end_date=end_date, min_unit="1", tick=False,
-                              bc=k)
-            if not type(df) == pd.DataFrame:
-                logger.info('Exception for calculating features for sec_id:{0} in bc:{1}'.format(sec_id, k))
-                continue
-            # fname = "data/{0}_{1}_{2}".format(sec_id, start_date, end_date)
-            fname = "{0}_{1}_{2}".format(sec_id, start_date, end_date)
-            df.to_csv('{0}.csv'.format(fname), index=False)
-            df.drop(['exchangeCD', 'ticker'], axis=1, inplace=True)
-            df_corr = df.corr(method='pearson')
-            df_corr.to_csv('{0}_corr.csv'.format(fname), index=False)
-            label_col = df_corr['label']
-            df_corr.drop(['label', 'index'], axis=1, inplace=True)
-            _df = pd.DataFrame({'label': label_col})
-            df_corr = pd.concat([_df, df_corr], axis=1)
-            corr_map(df_corr, fname=fname)
+    month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
+    idx = 0
+    while idx <= 22:
+        logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx+1]))
+        cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx+1], sec_num=10)
+        idx += 2
+    # df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
+    # windows_len_search()
 
 
 if __name__ == '__main__':
     main()
-    # df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
-    # print(df.shape)

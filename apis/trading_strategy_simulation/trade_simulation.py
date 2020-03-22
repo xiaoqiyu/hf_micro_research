@@ -332,4 +332,13 @@ def strategy4_report():
 
 if __name__ == '__main__':
     # strategy3_report()
-    strategy4_report()
+    # strategy4_report()
+    # df = DataAPI.MktTickRTIntraDayGet(securityID=u"300694.XSHE", startTime=u"09:30", endTime=u"14:57", field=u"", pandas="1")
+    # df['spread'] = df['bidPrice1'] - df['askPrice1']
+    # df['volPerDeal'] = df['volume']/df['deal']
+    # print(df.shape)
+
+    df = \
+        DataAPI.MktBarHistDateRangeGet(securityID=u"300694.XSHE", startDate=u"20200203", endDate=u"20200311", unit="60",
+                                       field=u"", pandas="1")[['barTime', 'totalVolume']]
+    print(df.columns)

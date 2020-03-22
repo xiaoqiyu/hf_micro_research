@@ -18,8 +18,10 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import f1_score
 from sklearn.metrics import make_scorer
-
+from utils.helper import get_full_data_path
+from utils.helper import get_full_model_path
 from utils.logger import Logger
+from sklearn.externals import joblib
 
 logger = Logger().get_log()
 
@@ -41,56 +43,73 @@ def _get_min(bartime_lst):
 
 
 def load_features(all_features=False, security_id=None):
-    ret = os.listdir('../data/')
+    ret = os.listdir(get_full_data_path())
     lst = []
     for item in ret:
-        if item.endswith('csv') and 'corr' not in item and (not security_id or (security_id in item)):
-            _df = pd.read_csv('data/{0}'.format(item))
+        if item.endswith('csv') and 'corr' not in item and (not security_id or (item.startswith(security_id))):
+            _df = pd.read_csv(get_full_data_path(item))
             # index, exchangeCD, ticker, dataDate
             # barTime: change to the offset minutes since the market start, and the relative time span in the day
             bar_time_lst = _df['barTime']
-            label5 = _df['label5']
+            # label5 = _df['label5']
+            label = _df['label']
+            _del_col = list(set(_df.columns).intersection(
+                {'index', 'exchangeCD', 'ticker', 'dataDate', 'barTime', 'barTime.1', 'index.1', 'label5', 'label',
+                 'ma20', 'maDiff20'}))
             _df.drop(
-                ['index', 'exchangeCD', 'ticker', 'dataDate', 'barTime', 'barTime.1', 'index.1', 'label5'],
+                _del_col,
                 axis=1,
                 inplace=True)
             _df = _df.apply(standadize, axis=0)
             bar_time_lst = _get_min(bar_time_lst)
             _df['barTime'] = bar_time_lst
-            _df['label5'] = label5
+            # _df['label5'] = label5
+            _df['label'] = label
             if not all_features:
                 return _df
             if _df['label'][0] == 1.0 or ('barTime' not in _df.columns) or (_df['barTime'][0] != _df['barTime'][0]):
                 logger.debug('verify data')
             lst.append(_df)
     df = pd.concat(lst)
-    df.to_csv('data/all_features.csv')
+    all_feature_path = get_full_data_path('all_features_{0}.csv'.format(security_id))
+    df.to_csv(all_feature_path)
     return df
 
 
-def train_models(model_name='svc'):
-    df = load_features(all_features=False)
+def train_models(*args, **kwargs):
+    model_name = args[0]
+    security_id = kwargs.get('security_id')
+    n_split = kwargs.get('n_split') or 5
+    test_ratio = kwargs.get('test_ratio') or 0.3
+    kernal = kwargs.get('kernel') or 'rbf'
+
+    df = load_features(all_features=True, security_id=security_id)
 
     # targets = [2 if item > 0 else 1 if item == 0 else 0 for item in df['label5']] # 3 classes
-    targets = [1 if item >= 0 else 0 for item in df['label5']]  # 2 classes
+    targets = [1 if item >= 0 else 0 for item in df['label']]  # 2 classes
     # it seems the label here does not hv big influence to the results
-    # df.drop(['label'], axis=1, inplace=True)
+    df.drop(['label'], axis=1, inplace=True)
+    logger.info('feature shape is:{0}'.format(df.shape))
     data = df.values
     m = {
-        'svc': svm.SVC(kernel='rbf', C=1),
+        'svc': svm.SVC(kernel=kernal, C=1),
         'adbc': AdaBoostClassifier(n_estimators=50)
     }.get(model_name)
 
     x_train, x_test, y_train, y_test = train_test_split(data, targets, test_size=0.3, random_state=0)
     m.fit(x_train, y_train)
     # print(clf.score(x_test, y_test))
-    cv = ShuffleSplit(n_splits=3, test_size=0.3, random_state=0)
+    cv = ShuffleSplit(n_splits=n_split, test_size=test_ratio, random_state=0)
     # scorer = make_scorer(f1_score, average='weighted')
     scorer = make_scorer(f1_score, average='micro')
-    scores = cross_val_score(m, data, targets, cv=cv, scoring=scorer)
-    print(scores)
-    print(m.predict(data[:2]), targets[:2])
+    scores = cross_val_score(m, x_train, y_train, cv=cv, scoring=scorer)
+    model_path = get_full_model_path('{0}'.format(model_name))
+    joblib.dump(m, model_path, protocol=2)
+    m1 = joblib.load(model_path)
+    test_score = m1.score(x_test, y_test)
+    logger.info(
+        'Train results for {0},{1} is: cv:{2}, out of sample score:{3}'.format(args, kwargs, scores, test_score))
 
 
 if __name__ == "__main__":
-    train_models('svc')
+    train_models('svc', security_id='002415.XSHE', n_split=5, test_ratio=0.3, kernel='rbf')
