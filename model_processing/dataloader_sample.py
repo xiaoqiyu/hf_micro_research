@@ -10,6 +10,7 @@ from torch.nn import utils as nn_utils
 from torch.utils.data import TensorDataset
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
+import numpy as np
 
 #
 
@@ -36,6 +37,8 @@ print(hn.size())
 def get_features():
     train_x = [
         [[], [], []]]
+
+
 #
 # class SimpleCustomBatch:
 #     def __init__(self, data):
@@ -64,3 +67,21 @@ def get_features():
 # for batch_ndx, sample in enumerate(loader):
 #     print(sample.inp.is_pinned())
 #     print(sample.tgt.is_pinned())
+
+if __name__ == '__main__':
+    tensor_in = torch.FloatTensor([[1, 2, 3], [1, 1, 0], [2, 0, 0]]).resize_(3, 3, 1)
+    # print(tensor_in)
+
+    # x = np.random.random(200).reshape(100, 5, 4)
+    x = np.array(range(200)).reshape(10, 5, 4)
+    y = np.random.random(10).reshape(-1, 1)
+    # x.append(y)
+    tensor_in = torch.from_numpy(x)
+
+    print(tensor_in.shape)
+    v = Variable(tensor_in)
+    data_loader = DataLoader(tensor_in, batch_size=2, shuffle=False)
+    for bx, x in enumerate(data_loader):
+        print(bx)
+        print(x.shape)
+        # print(x)

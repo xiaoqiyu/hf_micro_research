@@ -7,6 +7,7 @@
 @time: 19-11-15 下午4:03
 @desc:
 '''
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +19,8 @@ import seaborn as sns
 from data_processing.gen_sample import get_samples
 from utils.logger import Logger
 from utils.helper import get_full_data_path
+from utils.helper import get_full_data_path
+from utils.helper import get_full_model_path
 
 sns.set()
 logger = Logger().get_log()
@@ -337,6 +340,56 @@ def cache_features(start_date='20200302', end_date='20200313', sec_num=30):
             break
 
 
+def standadize(arr):
+    arr = arr.replace(np.inf, 0.0)
+    arr = arr.replace(-np.inf, 0.0)
+    _max, _min = arr.max(), arr.min()
+    return (arr - _min) / (_max - _min)
+
+
+def _get_min(bartime_lst):
+    ret = []
+    for item in bartime_lst:
+        _h, _m = item.split(':')
+        ret.append((int(_h) - 9) * 60 + int(_m))
+    _max, _min = max(ret), min(ret)
+    return [(item - _min) / (_max - _min) for item in ret]
+
+
+def load_features(all_features=False, security_id=None):
+    ret = os.listdir(get_full_data_path())
+    lst = []
+    for item in ret:
+        if item.endswith('csv') and 'corr' not in item and (not security_id or (item.startswith(security_id))):
+            _df = pd.read_csv(get_full_data_path(item))
+            # index, exchangeCD, ticker, dataDate
+            # barTime: change to the offset minutes since the market start, and the relative time span in the day
+            bar_time_lst = _df['barTime']
+            # label5 = _df['label5']
+            label = _df['label']
+            _del_col = list(set(_df.columns).intersection(
+                {'index', 'exchangeCD', 'ticker', 'dataDate', 'barTime', 'barTime.1', 'index.1', 'label5', 'label',
+                 'ma20', 'maDiff20'}))
+            _df.drop(
+                _del_col,
+                axis=1,
+                inplace=True)
+            _df = _df.apply(standadize, axis=0)
+            bar_time_lst = _get_min(bar_time_lst)
+            _df['barTime'] = bar_time_lst
+            # _df['label5'] = label5
+            _df['label'] = label
+            if not all_features:
+                return _df
+            if _df['label'][0] == 1.0 or ('barTime' not in _df.columns) or (_df['barTime'][0] != _df['barTime'][0]):
+                logger.debug('verify data')
+            lst.append(_df)
+    df = pd.concat(lst)
+    all_feature_path = get_full_data_path('all_features_{0}.csv'.format(security_id))
+    df.to_csv(all_feature_path)
+    return df
+
+
 def windows_len_search():
     target_features = ['retVar', 'retSkr', 'retKur', 'retAc', 'retBc', 'corrBc', 'ma5', 'ma10', 'ma20']
     for l in [10, 15, 20]:
@@ -377,8 +430,8 @@ def main():
     month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
     idx = 0
     while idx <= 22:
-        logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx+1]))
-        cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx+1], sec_num=10)
+        logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
+        cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
         idx += 2
     # df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
     # windows_len_search()

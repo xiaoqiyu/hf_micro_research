@@ -17,6 +17,16 @@ import datetime
 opt_url = "http://119.147.211.207:8090/TradeGW/Oper/CreateAccount"
 order_url = "http://119.147.211.207:8090/TradeGW/Trade/PlaceXHOrder"
 query_url_prefix = "http://119.147.211.207:8090/TradeGW/Query/"
+mkt_player_url = "http://119.147.211.207:8090/PlayerCtrl/ChangeMode/"
+player_status_url = "http://119.147.211.207:8090/Player/PlayerStatus"
+
+
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    raise TypeError("Type %s not serializable" % type(obj))
 
 
 def crate_account():
@@ -43,6 +53,30 @@ def place_order(security_id='', order_vol=100, side='1', price=13.0, biz_action=
         time.sleep(300)
 
 
+def change_mode():
+    headers = {'Content-type': 'application/json'}
+    data = {'CtrlType': 2, 'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
+            'LevelType': 1, 'SimSpeed': 2}
+    r = requests.post(mkt_player_url, data=json.dumps(data, default=json_serial), headers=headers)
+    print(r.content)
+
+
+def player_status():
+    # 'ModeID':  '8b49b486-d5a8-4a27-9855-60e2e97e342a',
+    headers = {'Content-type': 'application/json'}
+    data = {}
+    r = requests.post(player_status_url, data=json.dumps(data, default=json_serial), headers=headers)
+    pprint.pprint(json.loads(r.content.decode('utf-8')))
+
+
+def play_mkt():
+    headers = {'Content-type': 'application/json'}
+    data = {'ModelID':'8b49b486-d5a8-4a27-9855-60e2e97e342a', 'CtrlType': 3, 'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
+            'LevelType': 1, 'SimSpeed': 2}
+    r = requests.post(mkt_player_url, data=json.dumps(data, default=json_serial), headers=headers)
+    pprint.pprint(json.loads(r.content.decode('utf-8')))
+
+
 def query_daily_reports(query_suffix="QueryCurRptList", mode='r', date=None):
     '''
     # QueryCurRptList:日回报明细；QueryCurOrdList:日委托明细；QuerySecurityAssetsList：账户持仓
@@ -52,7 +86,7 @@ def query_daily_reports(query_suffix="QueryCurRptList", mode='r', date=None):
     f_name = "data/{}_{}.json".format(query_suffix, date or datetime.date.today().strftime("%Y%m%d"))
     if mode == 'w':
         r = requests.post(query_url_prefix + query_suffix, data=json.dumps(data), headers=headers)
-        print(query_url_prefix+query_suffix)
+        print(query_url_prefix + query_suffix)
         pprint.pprint(data)
         pprint.pprint(headers)
         with open(f_name, 'w') as outfile:
@@ -66,7 +100,11 @@ def query_daily_reports(query_suffix="QueryCurRptList", mode='r', date=None):
 
 
 if __name__ == '__main__':
-    place_order(security_id='603612.SH', order_vol=100, side='1', price=13, biz_action=2)
-    ret = query_daily_reports(query_suffix="QueryCurRptList", mode='w', date='20200320')
-    pprint.pprint(ret)
+    # place_order(security_id='603612.SH', order_vol=100, side='1', price=13, biz_action=2)
+    # ret = query_daily_reports(query_suffix="QueryCurRptList", mode='w', date='20200320')
+    # pprint.pprint(ret)
     # crate_account()
+    # change_mode()
+    # player_status()
+    # play_mkt()
+    player_status()
