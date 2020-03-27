@@ -67,23 +67,25 @@ def get_dataloader():
     df.drop(['label'], axis=1, inplace=True)
     val = df.values
     img = []
-    labels = []
+    # labels = []
     idx = 0
     n_features = df.shape[0]
     # TODO  double check whether to handle by each day(barTime=1.0)
     while idx <= n_features - TIME_STEP:
         img.append((val[idx: idx + TIME_STEP], targets[idx: idx + TIME_STEP][-1]))
-        labels.append(targets[idx: idx + TIME_STEP][-1])
+        # labels.append(targets[idx: idx + TIME_STEP][-1])
         idx += 1
     # train_tensor = torch.Tensor(val.reshape(-1, TIME_STEP, INPUT_SIZE))
 
     train_tensor = torch.Tensor(np.array(img).reshape(-1, TIME_STEP, INPUT_SIZE))
     train_img = DataLoader(train_tensor, batch_size=BATCH_SIZE, shuffle=False)
-    train_target = torch.Tensor(np.array(labels).reshape(-1, 1))
+    # train_target = torch.Tensor(np.array(labels).reshape(-1, 1))
 
     for idx, x in enumerate(train_img):
         print(idx, x.shape)
-    return train_img, train_target
+    return train_img
+
+
 
 
 #

@@ -23,9 +23,13 @@ from utils.helper import get_full_model_path
 from utils.logger import Logger
 from sklearn.externals import joblib
 
+# todo will be added later
+# from data_processing.hf_features import load_features
+
 logger = Logger().get_log()
 
 
+#
 def standadize(arr):
     arr = arr.replace(np.inf, 0.0)
     arr = arr.replace(-np.inf, 0.0)
@@ -83,7 +87,7 @@ def train_models(*args, **kwargs):
     test_ratio = kwargs.get('test_ratio') or 0.3
     kernal = kwargs.get('kernel') or 'rbf'
 
-    df = load_features(all_features=True, security_id=security_id)
+    df = load_features(all_features=False, security_id=security_id)
 
     # targets = [2 if item > 0 else 1 if item == 0 else 0 for item in df['label5']] # 3 classes
     targets = [1 if item >= 0 else 0 for item in df['label']]  # 2 classes
@@ -112,4 +116,4 @@ def train_models(*args, **kwargs):
 
 
 if __name__ == "__main__":
-    train_models('svc', security_id='002415.XSHE', n_split=5, test_ratio=0.3, kernel='rbf')
+    train_models('svc', security_id='002415.XSHE', n_split=5, test_rtaio=0.3, kernel='rbf')
