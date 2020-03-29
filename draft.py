@@ -71,7 +71,8 @@ def player_status():
 
 def play_mkt():
     headers = {'Content-type': 'application/json'}
-    data = {'ModelID':'8b49b486-d5a8-4a27-9855-60e2e97e342a', 'CtrlType': 3, 'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
+    data = {'ModelID': '8b49b486-d5a8-4a27-9855-60e2e97e342a', 'CtrlType': 3,
+            'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
             'LevelType': 1, 'SimSpeed': 2}
     r = requests.post(mkt_player_url, data=json.dumps(data, default=json_serial), headers=headers)
     pprint.pprint(json.loads(r.content.decode('utf-8')))

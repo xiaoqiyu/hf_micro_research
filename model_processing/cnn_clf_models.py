@@ -3,7 +3,7 @@
 '''
 @author: yuxiaoqi
 @contact: rpyxqi@gmail.com
-@file: ml_cls_models.py
+@file: ml_clf_models.py
 @time: 20-02-23 下午4:03
 @desc:
 '''
