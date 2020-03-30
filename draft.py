@@ -56,7 +56,7 @@ def place_order(security_id='', order_vol=100, side='1', price=13.0, biz_action=
 def change_mode():
     headers = {'Content-type': 'application/json'}
     data = {'CtrlType': 2, 'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
-            'LevelType': 1, 'SimSpeed': 2}
+            'LevelType': 1, 'SimSpeed': 5}
     r = requests.post(mkt_player_url, data=json.dumps(data, default=json_serial), headers=headers)
     print(r.content)
 
@@ -71,9 +71,9 @@ def player_status():
 
 def play_mkt():
     headers = {'Content-type': 'application/json'}
-    data = {'ModelID': '8b49b486-d5a8-4a27-9855-60e2e97e342a', 'CtrlType': 3,
+    data = {'ModelID': '5002bde8-b1dc-47e2-8af5-44edc7cb3e03', 'CtrlType': 3,
             'PlayerDate': datetime.datetime(2019, 12, 5), 'BeginTime': '093000', 'EndTime': '150000',
-            'LevelType': 1, 'SimSpeed': 2}
+            'LevelType': 1, 'SimSpeed': 5}
     r = requests.post(mkt_player_url, data=json.dumps(data, default=json_serial), headers=headers)
     pprint.pprint(json.loads(r.content.decode('utf-8')))
 
