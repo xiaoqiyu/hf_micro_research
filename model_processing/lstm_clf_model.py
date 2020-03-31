@@ -18,12 +18,14 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import os
 
 from utils.helper import get_full_data_path
 from utils.logger import Logger
 from utils.helper import get_full_data_path
 from utils.helper import get_full_model_path
+from data_processing.hf_features import cache_features
 
 logger = Logger().get_log()
 #
@@ -40,6 +42,7 @@ LAYERS = 4  # 有多少隐层，一个隐层一般放一个LSTM单元
 MODEL = 'LSTM'  # 模型名字
 # the valid criterier could be cross_entropy_loss or accuracy, this only applies for valid, not for training
 VALID_CRITERIER = 'cross_entropy_loss'
+NUM_LABEL = 3
 
 
 def standadize(arr):
@@ -79,21 +82,15 @@ def load_features(all_features=False, security_id=None):
             # index, exchangeCD, ticker, dataDate
             # barTime: change to the offset minutes since the market start, and the relative time span in the day
             bar_time_lst = _df['barTime']
-            # label5 = _df['label5']
-            label = _df['label']
             _del_col = list(set(_df.columns).intersection(
-                {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5', 'label',
+                {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5',
                  'ma20', 'maDiff20'}))
             _df.drop(
                 _del_col,
                 axis=1,
                 inplace=True)
-            # FIXME move this to get_dataloder function
-            # _df = _df.apply(standadize, axis=0)
             bar_time_lst = _get_min(bar_time_lst)
             _df['barTime'] = bar_time_lst
-            # _df['label5'] = label5
-            _df['label'] = label
             if not all_features:
                 return _df
             if _df['label'][0] == 1.0 or ('barTime' not in _df.columns) or (_df['barTime'][0] != _df['barTime'][0]):
@@ -105,14 +102,17 @@ def load_features(all_features=False, security_id=None):
     return df
 
 
-def _get_ts_loader(val, targets):
+def _get_ts_loader(val=None, targets=None):
     idx = 0
     img = []
     n_features = val.shape[0]
     # TODO  double check whether to handle by each day(barTime=1.0)
     while idx <= n_features - TIME_STEP:
         try:
-            img.append(np.column_stack([val[idx:idx + TIME_STEP], targets[idx:idx + TIME_STEP].reshape(-1, 1)]))
+            if isinstance(targets, np.ndarray):
+                img.append(np.column_stack([val[idx:idx + TIME_STEP], targets[idx:idx + TIME_STEP].reshape(-1, 1)]))
+            else:
+                img.append(val[idx:idx + TIME_STEP])
         except Exception as ex:
             logger.debug("contact with error:{0}".format(ex))
         idx += 1
@@ -122,16 +122,10 @@ def _get_ts_loader(val, targets):
 
 
 def get_dataloader(train_ratio=0.7, df=None):
-    # df = load_features(all_features=False, security_id='002415.XSHE')
     logger.debug('feature shape:{0}'.format(df.shape))
-    targets = np.array([1 if item >= 0 else 0 for item in df['label']])  # 2 classes
-    # it seems the label here does not hv big influence to the results
-    # targets = df['targets']
-    # df.drop(['label', 'dataDate'], axis=1, inplace=True)
+    # targets = np.array([1 if item >= 0 else 0 for item in df['label']])  # 2 classes
+    targets = np.array([0 if item < 0 else 1 if item == 0 else 2 for item in df['label']])  # 3 classes
     df = df.drop(['label', 'dataDate'], axis=1)
-    val = df.values
-    img = []
-    idx = 0
     n_features = df.shape[0]
     train_num = int(n_features * train_ratio)
     val_num = n_features - train_num
@@ -144,19 +138,6 @@ def get_dataloader(train_ratio=0.7, df=None):
     val_val = df_val.values
     train_target = targets[:train_num]
     val_target = targets[-val_num:]
-
-    # np.random.seed(42)
-    # perm_idx = list(range(n_features))
-    # np.random.shuffle(perm_idx)
-    # train_idx = int(n_features * train_ratio)
-    # val_idx = int(n_features * val_ratio)
-    # test_idx = int(n_features * (1 - train_ratio - val_ratio))
-    # train_val = val[perm_idx[:train_idx], :]
-    # val_val = val[perm_idx[train_idx:train_idx + val_idx], :]
-    # test_val = val[perm_idx[-test_idx:], :]
-    # train_target = targets[perm_idx[:train_idx]]
-    # val_target = targets[perm_idx[train_idx:train_idx + val_idx]]
-    # test_target = targets[perm_idx[-test_idx:]]
 
     train_loader = _get_ts_loader(train_val, train_target)
     val_loader = _get_ts_loader(val_val, val_target)
@@ -176,7 +157,7 @@ class lstm(nn.Module):
             batch_first=True  # 如果为True，输入输出数据格式是(batch, seq_len, feature)
             # 为False，输入输出数据格式是(seq_len, batch, feature)，
         )
-        self.hidden_out = nn.Linear(HIDDEN_SIZE, 2)  # 最后一个时序的输出接一个全连接层
+        self.hidden_out = nn.Linear(HIDDEN_SIZE, NUM_LABEL)  # 最后一个时序的输出接一个全连接层
         self.h_s = None
         self.h_c = None
 
@@ -237,7 +218,6 @@ def train_lstm(test_date='2019-12-02'):
         # best_score = 0.0
 
         rnn.eval()
-
         for step, item in enumerate(valid_loader):
             nx, ny, nz = item.shape
             blocks = torch.chunk(item, nz, dim=2)
@@ -262,7 +242,7 @@ def train_lstm(test_date='2019-12-02'):
             else:
                 logger.warn("Invalid valid_criterier: {0}".format(VALID_CRITERIER))
         if VALID_CRITERIER == 'cross_entropy_loss':
-            logger.info('Epoch:{0}, mean train loss:{1},std train loss:{2}, valid loss is:{2}'.format(i, np.mean(
+            logger.info('Epoch:{0}, mean train loss:{1},std train loss:{2}, valid loss is:{3}'.format(i, np.mean(
                 total_train_loss), np.std(total_train_loss), valid_loss))
             valid_loss.append(np.mean(step_valid_loss))
             if valid_loss and valid_loss[-1] < min_valid_loss:
@@ -290,18 +270,52 @@ def train_lstm(test_date='2019-12-02'):
 
         logger.info('Epoch: {0}, Current learning rate: {1}'.format(i, mult_step_scheduler.get_lr()))
         mult_step_scheduler.step()  # 学习率更新
+    plt.plot(train_loss, color='r')
+    plt.plot(valid_loss, color='b')
+    plt.legend(['train_loss', 'valid_loss'])
+    plt.show()
 
 
-def predict_with_lstm(x):
-    if isinstance(x, np.ndarray):
-        x = torch.from_numpy(x).float()
+def predict_with_lstm(date='2019-12-02', inputs=None):
+    if isinstance(inputs, np.ndarray):
+        inputs = torch.from_numpy(inputs).float()
+        rnn_dict = torch.load(get_full_model_path('LSTM.model'))
+        predicts = rnn_dict.get('model').predict(inputs)
+        return predicts
+    test_sample = {'399005.XSHE': ['002415.XSHE']}
+    _df = cache_features(start_date=date, end_date=date, test_sample=test_sample)
+    bar_time_lst = _df['barTime'].iloc[:, 0]
+    _del_col = list(set(_df.columns).intersection(
+        {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5',
+         'ma20', 'maDiff20'}))
+    _df.drop(
+        _del_col,
+        axis=1,
+        inplace=True)
+    bar_time_lst = _get_min(bar_time_lst)
+    _df['barTime'] = bar_time_lst
+    targets = np.array([1 if item >= 0 else 0 for item in _df['label']])  # 2 classes
+    targets = np.array([0 if item < 0 else 1 if item == 0 else 2 for item in _df['label']])  # 3 classes
+    _df = _df.drop(['label', 'dataDate'], axis=1)
+    _df = _feature_preporcessing(_df)
+    val = _df.values
+    _data_loader = _get_ts_loader(val=val, targets=None)
+    x = torch.from_numpy(val).float()
     rnn_dict = torch.load(get_full_model_path('LSTM.model'))
-    return rnn_dict.get('model').predict(x)
+    predicts = rnn_dict.get('model').predict(_data_loader.dataset.float()).numpy()
+    n_predict = predicts.shape[0]
+    correct_num = [1 if item == predicts[idx] else 0 for idx, item in enumerate(targets[-n_predict:])]
+    return predicts, float(sum(correct_num) / n_predict)
 
 
 if __name__ == '__main__':
     # load_features(all_features=True, security_id='002415.XSHE')
     # get_dataloader()
-    train_lstm()
+    # train_lstm()
     # x = np.random.random(60 * 49).reshape(3, 20, 49)
     # print(predict_with_lstm(x))
+    import pprint
+
+    predicts, accuaracy = predict_with_lstm()
+    pprint.pprint(predicts)
+    pprint.pprint(accuaracy)

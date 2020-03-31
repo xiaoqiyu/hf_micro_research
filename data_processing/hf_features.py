@@ -288,7 +288,7 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
                         train_x.append(list(rows[_start: idx + 1]))
                         total_row += 1
                     _start = idx + 1
-        logger.info('Start processing sec id:{0} for bc:{1} and date:{2}'.format(security_id, bc, date))
+        logger.info('Start processing sec id:{0} for date:{1}'.format(security_id, date))
         return train_x, train_y, columns
 
 
@@ -306,8 +306,8 @@ def corr_map(df, fname):
     plt.savefig(get_full_data_path('{0}.jpg'.format(fname)))
 
 
-def cache_features(start_date='20200302', end_date='20200313', sec_num=30):
-    test_sample = get_samples(mode=0, total_num=sec_num)
+def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_sample=None):
+    test_sample = test_sample or  get_samples(mode=0, total_num=sec_num)
     # test_sample = {'399005.XSHE': ['002180.XSHE']}
     for win_len in [10]:
         for k, v in test_sample.items():
@@ -334,10 +334,7 @@ def cache_features(start_date='20200302', end_date='20200313', sec_num=30):
                 _df5 = pd.DataFrame({'label': label5})
                 df_corr5 = pd.concat([_df5, df_corr], axis=1)
                 corr_map(df_corr5, fname='{0}_{1}'.format(fname, '5min'))
-                # FIXME remove hardcode
-                break
-            # FIXME remvoe hardcode
-            break
+                return df
 
 
 def standadize(arr):
@@ -427,14 +424,18 @@ def get_month_start_end_dates(start_date='', end_date=''):
 
 
 def main():
-    month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
-    idx = 0
-    while idx <= 22:
-        logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
-        cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
-        idx += 2
-    # df = get_features_by_date(security_id=u"002180.XSHE", date='20191205', min_unit="1", tick=True)
+    # month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
+    # idx = 0
+    # while idx <= 22:
+    #     logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
+    #     cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
+    #     idx += 2
+    # df = get_features_by_date(security_id=u"002415.XSHE", date='20191202', min_unit="1", tick=True)
     # windows_len_search()
+    test_sample = {'399005.XSHE': ['002415.XSHE']}
+    df = cache_features(start_date='2019-12-02', end_date='2019-12-02', test_sample=test_sample)
+    print(df.shape)
+    print(df.head(5))
 
 
 if __name__ == '__main__':
