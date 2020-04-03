@@ -17,8 +17,9 @@ def get_full_data_path(file_name=None):
 
 
 def get_full_model_path(model_name=None):
+    _base_dir = os.path.join(os.path.realpath(os.path.pardir))
     if model_name:
-        return os.path.realpath(os.path.join(os.path.realpath(os.path.pardir), 'models', model_name))
-    return os.path.realpath(os.path.join(os.path.realpath(os.path.pardir), 'models'))
-
-
+        # return os.path.realpath(os.path.join(os.path.realpath(os.path.pardir), 'models', model_name))
+        return os.path.realpath(os.path.join(_base_dir.split('hf_research')[0] + 'hf_research', 'models', model_name))
+    # return os.path.realpath(os.path.join(os.path.realpath(os.path.pardir), 'models'))
+    return os.path.realpath(os.path.join(_base_dir.split('hf_research')[0] + 'hf_research', 'models'))

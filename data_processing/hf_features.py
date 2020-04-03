@@ -134,8 +134,9 @@ def _cal_min_features(df_min, window_len=20):
         for i in range(4):
             ret.append(np.nan)
         return ret
-
-    df_min['ret'] = df_min[['closePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1)
+    # TODO return label by closeprice or vwap??
+    df_min['ret'] = df_min[['closePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1) # return label by closePrice
+    # df_min['ret'] = df_min[['vwap']].rolling(2).apply(lambda x: x[-1] / x[0] - 1) #return label by vwap
     df_min['retLog'] = df_min[['closePrice']].rolling(2).apply(lambda x: math.log(x[-1]) - math.log(x[0]))
     df_min['retVar'] = df_min[['ret']].rolling(window_len).apply(lambda x: x.var())
     df_min['retSkr'] = df_min[['ret']].rolling(window_len).apply(_get_skr)
@@ -220,7 +221,6 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
 
     common_min_lst = set(df_min['barTime']).intersection(set(data_min))
     df_min = df_min[df_min['barTime'].isin(common_min_lst)].sort_values(by='barTime', ascending=True)
-
     df_agg = df_agg[df_agg['barTime'].isin(common_min_lst)].sort_values(by='barTime', ascending=True)
 
     df_min = df_min.reset_index()
@@ -306,8 +306,8 @@ def corr_map(df, fname):
     plt.savefig(get_full_data_path('{0}.jpg'.format(fname)))
 
 
-def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_sample=None):
-    test_sample = test_sample or  get_samples(mode=0, total_num=sec_num)
+def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_sample=None, saved=True):
+    test_sample = test_sample or get_samples(mode=0, total_num=sec_num)
     # test_sample = {'399005.XSHE': ['002180.XSHE']}
     for win_len in [10]:
         for k, v in test_sample.items():
@@ -318,6 +318,8 @@ def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_
                 if not type(df) == pd.DataFrame:
                     logger.info('Exception for calculating features for sec_id:{0} in bc:{1}'.format(sec_id, k))
                     continue
+                if not saved:
+                    return df
                 fname = "{0}_{1}_{2}_{3}".format(sec_id, start_date, end_date, win_len)
                 # fname = "{0}_{1}_{2}".format(sec_id, start_date, end_date)
                 df.to_csv(get_full_data_path('{0}.csv'.format(fname)), index=False)

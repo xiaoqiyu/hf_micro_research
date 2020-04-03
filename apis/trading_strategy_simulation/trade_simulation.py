@@ -18,11 +18,15 @@ import seaborn as sns
 from utils.logger import Logger
 import math
 from data_processing.hf_features import get_features_by_date
+from model_processing.lstm_clf_model import predict_with_lstm
+from model_processing.lstm_clf_model import lstm
 
 sns.set()
-logger = Logger(log_level='INFO').get_log()
+logger = Logger(log_level='DEBUG').get_log()
 
 uqer_client = uqer.Client(token="26356c6121e2766186977ec49253bf1ec4550ee901c983d9a9bff32f59e6a6fb")
+
+MIN_VOL = 1000
 
 
 def get_market_impacts():
@@ -32,7 +36,13 @@ def get_market_impacts():
     return 0.001, 0.002
 
 
-def _sample_intraday_trend(labels=[], presicion_score=0.7):
+def _sample_intraday_trend(trade_date=''):
+    predict_ret, accuracy = predict_with_lstm(date=trade_date, inputs=None)
+    logger.info("Prediction for trade_date:{0} with accuracy:{1}".format(trade_date, accuracy))
+    return predict_ret
+
+
+def _sample_intraday_trend_sim(labels=[], presicion_score=0.7):
     _len = len(labels)
     if not _len:
         return None
@@ -67,9 +77,10 @@ def get_features(security_id='', start_date='', end_date='', min_unit="5"):
     return df_min
 
 
-def get_sim_results(participant_ratio=0.15, target_vol=10000000, trade_date='2019-12-02', mode=2,
-                    intraday_precision=0.7,
-                    intraday_adj=0.1, df_min=None):
+def get_sim_results(daily_participant_ratio=0.15, target_vol=10000000, trade_date='2019-12-02', mode=2,
+                    intraday_adj=0.1,
+                    df_min=None):
+    df_min = df_min[df_min.barTime <= '14:56']
     df_agg = df_min.groupby('dataDate').agg(
         {
             'totalVolume': ['sum'],
@@ -77,7 +88,7 @@ def get_sim_results(participant_ratio=0.15, target_vol=10000000, trade_date='201
     flatten_columns = ['{0}_{1}'.format(item[0], item[1]) for item in df_agg.columns]
     df_agg.columns = flatten_columns
     df_agg = df_agg.reset_index()
-    df_agg['vol_mean'] = df_agg[['totalVolume_sum']].rolling(5).apply(lambda x: x.mean() * participant_ratio)
+    df_agg['vol_mean'] = df_agg[['totalVolume_sum']].rolling(5).apply(lambda x: x.mean() * daily_participant_ratio)
     df_agg.sort_values(by='dataDate', inplace=True)
     vol_dict = dict(zip(df_agg['dataDate'][1:], df_agg['vol_mean'][:-1]))
     total_vol = 0
@@ -93,11 +104,15 @@ def get_sim_results(participant_ratio=0.15, target_vol=10000000, trade_date='201
         if total_vol >= target_vol:
             logger.info('complete trading on date:{0} with total_vol:{1}'.format(date, total_vol))
             break
-        all_dates.append(date)
+        # _date_df = df_min[df_min.dataDate == date]
         _df = df_min[df_min.dataDate == date]
+        _min_vol_dict = dict(zip(_df['barTime'], _df['totalVolume']))
+        all_dates.append(date)
+
         daily_vol = min(vol, target_vol - total_vol)
+        num_min = len(_min_vol_dict.keys())
         _vol = [daily_vol / 48] * _df.shape[0]
-        daily_vol = min(vol, target_vol - total_vol)
+        _init_vol = int(daily_vol / num_min / 100) * 100
         if mode == 1:
             total_vol += sum(_vol)
             if total_vol > target_vol:
@@ -112,11 +127,64 @@ def get_sim_results(participant_ratio=0.15, target_vol=10000000, trade_date='201
             daily_value_lst.append(_value)
             daily_vwap_lst.append(_value / sum(_vol))
         elif mode == 2:
-            _predictions = _sample_intraday_trend(list(_df['label']), intraday_precision)
-            adj_vol = [_vol[0]]
-            for idx, item in enumerate(_predictions[:-1]):
-                adj_vol.append(_vol[idx] * (1 + intraday_adj) if item > 0.0 else _vol[idx] * (1 - intraday_adj))
-            total_vol += sum(adj_vol)
+            # _predictions = _sample_intraday_trend(list(_df['label']), intraday_precision)
+            _predictions = _sample_intraday_trend(trade_date=date)
+            # for idx, item in enumerate(_predictions[:-1]):
+            #     adj_vol.append(_vol[idx] * (1 + intraday_adj) if item > 0.0 else _vol[idx] * (1 - intraday_adj))
+
+            _tmp_vol = MIN_VOL if _init_vol < MIN_VOL else _init_vol
+            adj_vol = [_tmp_vol]
+            _min_lst = list(_min_vol_dict.keys())[:-1]
+            _predict_lst = [-1]
+            for _min in _min_lst:
+                _pred = _predictions.get(_min)
+                if _min in _predictions:
+                    _predict_lst.append(_pred)
+                else:
+                    _predict_lst.append(-1)
+                # _predict_lst.append(_predictions.get(_min) or -1)
+                _vol = _min_vol_dict.get(_min)
+                if total_vol >= target_vol:
+                    adj_vol.append(0)
+                    continue
+                #FIXME the prediction result will result in the next min
+                # _pred = _predictions.get(_min)
+
+                if _pred == 0:
+                    _vol0 = int(_tmp_vol * (1 - intraday_adj) / 100) * 100
+                    # _vol0 = MIN_VOL if _vol0 < MIN_VOL else _vol0
+                    if total_vol + _vol0 >= target_vol:
+                        _vol0 = target_vol - total_vol
+                    adj_vol.append(_vol0)
+                    total_vol += _vol0
+                    logger.debug(
+                        "pred result 0, date:{0}, time:{1}, curr vol:{2}, total vol:{3}".format(date, _min, _vol0,
+                                                                                                total_vol))
+                elif _pred == 2:
+
+                    _vol2 = int(_tmp_vol * (1 + intraday_adj) / 100) * 100
+                    _vol2 = MIN_VOL if _vol2 < MIN_VOL else _vol2
+                    if total_vol + _vol2 >= target_vol:
+                        _vol2 = target_vol - total_vol
+                    adj_vol.append(_vol2)
+                    total_vol += _vol2
+                    logger.debug(
+                        "pred result 2, date:{0}, time:{1}, curr vol:{2}, total vol:{3}".format(date, _min, _vol2,
+                                                                                                total_vol))
+                else:
+
+                    _vol1 = MIN_VOL if _tmp_vol < MIN_VOL else _tmp_vol
+                    if total_vol + _vol1 >= target_vol:
+                        _vol1 = target_vol - total_vol
+                    adj_vol.append(_vol1)
+                    total_vol += _vol1
+                    logger.debug(
+                        "pred result 1, date:{0}, time:{1}, cur vol:{2}, total vol:{3}".format(date, _min, _vol1,
+                                                                                               total_vol))
+            _df['predict'] = _predict_lst
+            _df['adj_vol'] = adj_vol
+            _df.to_csv('check_results1_{0}.csv'.format(date))
+
             if total_vol > target_vol:
                 adj_vol[-1] -= total_vol - target_vol
                 total_vol = target_vol
@@ -125,10 +193,15 @@ def get_sim_results(participant_ratio=0.15, target_vol=10000000, trade_date='201
                 total_vol = target_vol
             # total_value += sum(_df['vwap'] * adj_vol)
             daily_vol_lst.append(sum(adj_vol))
+            logger.info(
+                'processing date:{0}, total_vol:{1},target_vol:{2},daily_vol:{3}'.format(date, total_vol, target_vol,
+                                                                                         daily_vol))
             _value = sum(_df['dealPrice'] * adj_vol)
-            daily_value_lst.append(sum(_df['dealPrice'] * adj_vol))
+            # daily_value_lst.append(sum(_df['dealPrice'] * adj_vol))
+            daily_value_lst.append(sum(_df['closePrice'] * adj_vol))
             daily_vwap_lst.append(_value / sum(adj_vol))
             daily_price_lst.append(_df['dealPrice'].mean())
+            # daily_price_lst.append(sum(_df['totalValue'])/sum(_df['totalVolume']))
             # if _value / sum(adj_vol) < sum(_df['dealPrice'] * _vol) / sum(_vol):
             # print(date, _value / sum(adj_vol), _df['dealPrice'].mean())
     # print(intraday_adj, sum(daily_value_lst) / sum(daily_vol_lst))
@@ -150,15 +223,14 @@ def get_transaction():
     print(df_agg)
 
 
-def use_case_sim(security_id='002180.XSHE', participant_ratio=0.2, start_end='20191101', end_date='20191231',
+def use_case_sim(security_id='002180.XSHE', participant_ratio=0.2, start_date='20191101', end_date='20191231',
                  trade_date='2019-12-05', passive_ratio=0.5, mode=1):
     '''
     mode = 1: all execute by passive(twap/vwap); mode = 2: all execute by liquididy; mode=3: ratio of passive execute is
     passive_ratio, others by liquidity
     '''
     prev_trade_date = '2019-12-04'
-
-    df = DataAPI.MktEqudGet(secID=security_id, tradeDate=u"", beginDate=start_end, endDate=end_date, isOpen="",
+    df = DataAPI.MktEqudGet(secID=security_id, tradeDate=u"", beginDate=start_date, endDate=end_date, isOpen="",
                             field=["tradeDate", "chgPct", "closePrice", "turnoverVol"], pandas="1")
     df['ret_std'] = df[['chgPct']].rolling(20).apply(lambda x: x.std())
     df['vol_sum'] = df[['turnoverVol']].rolling(5).apply(lambda x: x.sum())
@@ -232,7 +304,7 @@ def use_case_sim(security_id='002180.XSHE', participant_ratio=0.2, start_end='20
 
 def get_market_impact(s, adv, sigma, vt_dict, q_dict):
     '''
-    return instance impact, tmporary impact, and permenant impact, all in bp
+    return instance impact, temporary impact, and permenant impact, all in bp
     '''
     a1, a2, a3, a4, b1 = 2431.9, 0.52, 0.92, 1.00, 0.84
     # Asia emerging market parameters
@@ -297,28 +369,36 @@ def get_liquid_results(df_tick, target_vol, ratio, level, price_rule):
     return total_values, total_vol, finish_time
 
 
-def strategy3_report():
+def simulation_with_intraday_trend(security_id='002415.XSHE', start_date='20191125', end_date='20191231',
+                                   trade_date='2019-12-02',
+                                   target_vol=3000000, mode=2):
     # case 1&2 report simulation
-    features = get_features(security_id='002180.XSHE', start_date='20191125', end_date='20191231', min_unit="5")
+    features = get_features(security_id=security_id, start_date=start_date, end_date=end_date, min_unit="1")
     sum_alpha = []
     mean_alpha = []
-    for participant_ratio in [0.1, 0.15, 0.2]:
-        for adj_ratio in [0.15, 0.2, 0.25, 0.3]:
-            vol2, value2, vwap2, avg_prices, dates = get_sim_results(participant_ratio=0.15, target_vol=10000000,
-                                                                     trade_date='2019-12-02', mode=2,
-                                                                     intraday_precision=0.75, intraday_adj=adj_ratio,
+    for participant_ratio in [0.15, 0.2]:
+        # for adj_ratio in [0.15, 0.2, 0.25, 0.3]:
+        for adj_ratio in [0.3]:
+            vol2, value2, vwap2, avg_prices, dates = get_sim_results(daily_participant_ratio=participant_ratio,
+                                                                     target_vol=target_vol,
+                                                                     trade_date=trade_date, mode=mode,
+                                                                     intraday_adj=adj_ratio,
                                                                      df_min=features)
             alpha = [(item - avg_prices[idx]) / avg_prices[idx] * 10000 for idx, item in enumerate(vwap2)]
             df = pd.DataFrame({'tradeDate': dates, 'strategy_vwap': vwap2, 'mkt_vwap': avg_prices, 'alpha(bp)': alpha})
             df.to_csv("case2_report_{0}_{1}.csv".format(adj_ratio, participant_ratio))
-            print(participant_ratio, adj_ratio, sum(alpha), sum(alpha) / len(alpha))
+            logger.info(
+                'Simulation results with participant_ratio:{0}, adjust_ratio:{1}, total alpha:{2}, mean alpha:{3}'.format(
+                    participant_ratio, adj_ratio, sum(alpha), sum(alpha) / len(alpha)))
             sum_alpha.append(sum(alpha))
             mean_alpha.append(sum(alpha) / len(alpha))
-    print(max(sum_alpha), min(sum_alpha), sum(sum_alpha) / len(sum_alpha))
-    print(sum_alpha)
+    logger.info("All mean alpha is:{0}".format(mean_alpha))
+    logger.info('All sum alpha is:{0}'.format(sum_alpha))
 
 
-def strategy4_report():
+def simulation_with_advance_algorithm(security_id='002180.XSHE', participant_ratio=0.15, start_date='20191101',
+                                      end_date='20191231',
+                                      trade_date='2019-12-05', passive_ratio=0.7, mode=3):
     # use case simulation
     # use_case_sim(security_id='002180.XSHE', participant_ratio=0.15, start_end='20191101', end_date='20191231',
     #              trade_date='2019-12-05', passive_ratio=0.7, mode=1)
@@ -326,19 +406,23 @@ def strategy4_report():
     #              trade_date='2019-12-05', passive_ratio=0.7, mode=2)
     # use_case_sim(security_id='002180.XSHE', participant_ratio=0.15, start_end='20191101', end_date='20191231',
     #              trade_date='2019-12-05', passive_ratio=0.5, mode=3)
-    use_case_sim(security_id='002180.XSHE', participant_ratio=0.15, start_end='20191101', end_date='20191231',
-                 trade_date='2019-12-05', passive_ratio=0.7, mode=3)
+    use_case_sim(security_id=security_id, participant_ratio=participant_ratio, start_date=start_date, end_date=end_date,
+                 trade_date=trade_date, passive_ratio=passive_ratio, mode=mode)
 
 
 if __name__ == '__main__':
-    # strategy3_report()
-    # strategy4_report()
+    simulation_with_intraday_trend(security_id='002415.XSHE', start_date='20191125', end_date='20191231',
+                                   trade_date='2019-12-02',
+                                   target_vol=3000000, mode=2)
+    # simulation_with_advance_algorithm(security_id='002180.XSHE', participant_ratio=0.15, start_date='20191101',
+    #                                   end_date='20191231',
+    #                                   trade_date='2019-12-05', passive_ratio=0.7, mode=3)
     # df = DataAPI.MktTickRTIntraDayGet(securityID=u"300694.XSHE", startTime=u"09:30", endTime=u"14:57", field=u"", pandas="1")
     # df['spread'] = df['bidPrice1'] - df['askPrice1']
     # df['volPerDeal'] = df['volume']/df['deal']
     # print(df.shape)
 
-    df = \
-        DataAPI.MktBarHistDateRangeGet(securityID=u"300694.XSHE", startDate=u"20200203", endDate=u"20200311", unit="60",
-                                       field=u"", pandas="1")[['barTime', 'totalVolume']]
-    print(df.columns)
+    # df = \
+    #     DataAPI.MktBarHistDateRangeGet(securityID=u"300694.XSHE", startDate=u"20200203", endDate=u"20200311", unit="60",
+    #                                    field=u"", pandas="1")[['barTime', 'totalVolume']]
+    # print(df.columns)

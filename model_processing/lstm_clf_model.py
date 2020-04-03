@@ -177,7 +177,7 @@ class lstm(nn.Module):
 def train_lstm(test_date='2019-12-02'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     df = load_features(all_features=True, security_id='002415.XSHE')
-    train_val_df = df[df.dataDate <= test_date]
+    train_val_df = df[df.dataDate < test_date]
     test_df = df[df.dataDate == test_date]
 
     rnn = lstm().to(device)  # 使用GPU或CPU
@@ -210,7 +210,6 @@ def train_lstm(test_date='2019-12-02'):
             optimizer.step()  # apply gradients
             total_train_loss.append(loss.item())
         train_loss.append(np.mean(total_train_loss))  # 存入平均交叉熵
-        # logger.info('Epoch: {0}, loss is:{1}'.format(i, np.mean(total_train_loss)))
 
         step_valid_loss = []
         total_num = 0
@@ -280,11 +279,10 @@ def predict_with_lstm(date='2019-12-02', inputs=None):
     if isinstance(inputs, np.ndarray):
         inputs = torch.from_numpy(inputs).float()
         rnn_dict = torch.load(get_full_model_path('LSTM.model'))
-        predicts = rnn_dict.get('model').predict(inputs)
-        return predicts
+        return rnn_dict.get('model').predict(inputs)
     test_sample = {'399005.XSHE': ['002415.XSHE']}
-    _df = cache_features(start_date=date, end_date=date, test_sample=test_sample)
-    bar_time_lst = _df['barTime'].iloc[:, 0]
+    _df = cache_features(start_date=date, end_date=date, test_sample=test_sample, saved=False)
+    _bar_time_lst = _df['barTime'].iloc[:, 0]
     _del_col = list(set(_df.columns).intersection(
         {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5',
          'ma20', 'maDiff20'}))
@@ -292,7 +290,7 @@ def predict_with_lstm(date='2019-12-02', inputs=None):
         _del_col,
         axis=1,
         inplace=True)
-    bar_time_lst = _get_min(bar_time_lst)
+    bar_time_lst = _get_min(_bar_time_lst)
     _df['barTime'] = bar_time_lst
     targets = np.array([1 if item >= 0 else 0 for item in _df['label']])  # 2 classes
     targets = np.array([0 if item < 0 else 1 if item == 0 else 2 for item in _df['label']])  # 3 classes
@@ -301,11 +299,12 @@ def predict_with_lstm(date='2019-12-02', inputs=None):
     val = _df.values
     _data_loader = _get_ts_loader(val=val, targets=None)
     x = torch.from_numpy(val).float()
-    rnn_dict = torch.load(get_full_model_path('LSTM.model'))
-    predicts = rnn_dict.get('model').predict(_data_loader.dataset.float()).numpy()
-    n_predict = predicts.shape[0]
-    correct_num = [1 if item == predicts[idx] else 0 for idx, item in enumerate(targets[-n_predict:])]
-    return predicts, float(sum(correct_num) / n_predict)
+    _full_model_path = get_full_model_path('LSTM.model')
+    rnn_dict = torch.load(_full_model_path)
+    ret_predicts = rnn_dict.get('model').predict(_data_loader.dataset.float()).numpy()
+    n_predict = ret_predicts.shape[0]
+    correct_num = [1 if item == ret_predicts[idx] else 0 for idx, item in enumerate(targets[-n_predict:])]
+    return dict(zip(_bar_time_lst[-n_predict:], ret_predicts)), float(sum(correct_num) / n_predict)
 
 
 if __name__ == '__main__':
@@ -315,7 +314,6 @@ if __name__ == '__main__':
     # x = np.random.random(60 * 49).reshape(3, 20, 49)
     # print(predict_with_lstm(x))
     import pprint
-
-    predicts, accuaracy = predict_with_lstm()
+    predicts, accuaracy = predict_with_lstm(date='2019-12-03')
     pprint.pprint(predicts)
     pprint.pprint(accuaracy)
