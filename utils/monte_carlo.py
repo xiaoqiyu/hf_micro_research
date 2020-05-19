@@ -22,7 +22,7 @@ import numpy as np
 days = 365
 
 # Now our delta
-dt = 1/days
+dt = 1 / days
 
 # Now let's grab our mu (drift) from the expected return data we got for AAPL
 mu = 0.1
@@ -30,7 +30,8 @@ mu = 0.1
 # Now let's grab the volatility of the stock from the std() of the average return
 sigma = 0.3
 
-def stock_monte_carlo(start_price,days,mu,sigma):
+
+def stock_monte_carlo(start_price, days, mu, sigma):
     ''' This function takes in starting stock price, days of simulation,mu,sigma, and returns simulated price array'''
 
     # Define a price array
@@ -41,24 +42,23 @@ def stock_monte_carlo(start_price,days,mu,sigma):
     drift = np.zeros(days)
 
     # Run price array for number of days
-    for x in range(1,days):
-
+    for x in range(1, days):
         # Calculate Schock
         shock[x] = np.random.normal(loc=mu * dt, scale=sigma * np.sqrt(dt))
         # Calculate Drift
         drift[x] = mu * dt
         # Calculate Price
-        price[x] = price[x-1] + (price[x-1] * (drift[x] + shock[x]))
+        price[x] = price[x - 1] + (price[x - 1] * (drift[x] + shock[x]))
 
     return price
+
 
 # Get start price
 start_price = 100
 
 for run in range(10):
-    plt.plot(stock_monte_carlo(start_price,days,mu,sigma))
+    plt.plot(stock_monte_carlo(start_price, days, mu, sigma))
 plt.xlabel("Days")
 plt.ylabel("Price")
 plt.title('Monte Carlo Analysis for Tesla')
 plt.show()
-

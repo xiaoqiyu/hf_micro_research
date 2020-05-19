@@ -19,14 +19,20 @@ from utils.logger import Logger
 import math
 from data_processing.hf_features import get_features_by_date
 from model_processing.lstm_clf_model import predict_with_lstm
+from data_processing.gen_sample import get_samples
 from model_processing.lstm_clf_model import lstm
+from account_info.get_account_info import get_account_info
 
 sns.set()
 logger = Logger(log_level='DEBUG').get_log()
 
-uqer_client = uqer.Client(token="26356c6121e2766186977ec49253bf1ec4550ee901c983d9a9bff32f59e6a6fb")
+uqer_client = uqer.Client(token=get_account_info().get('uqer_token'))
 
 MIN_VOL = 1000
+SAMPLE_MODE = 2
+SAMPLE_NUM = 1
+TEST_DATE = '2019-12-02'
+MKT_TICKERS = ['399001']
 
 
 def get_market_impacts():
@@ -36,10 +42,11 @@ def get_market_impacts():
     return 0.001, 0.002
 
 
-def _sample_intraday_trend(trade_date=''):
-    predict_ret, accuracy = predict_with_lstm(date=trade_date, inputs=None)
+def _sample_intraday_trend(trade_date='', test_samples=None):
+    # predict_ret, accuracy = predict_with_lstm(date=trade_date, inputs=None)
+    labels, accuracy = predict_with_lstm(date=TEST_DATE, predict_sample=test_samples)
     logger.info("Prediction for trade_date:{0} with accuracy:{1}".format(trade_date, accuracy))
-    return predict_ret
+    return labels
 
 
 def _sample_intraday_trend_sim(labels=[], presicion_score=0.7):
@@ -79,7 +86,7 @@ def get_features(security_id='', start_date='', end_date='', min_unit="5"):
 
 def get_sim_results(daily_participant_ratio=0.15, target_vol=10000000, trade_date='2019-12-02', mode=2,
                     intraday_adj=0.1,
-                    df_min=None):
+                    df_min=None, security_id=''):
     df_min = df_min[df_min.barTime <= '14:56']
     df_agg = df_min.groupby('dataDate').agg(
         {
@@ -128,7 +135,7 @@ def get_sim_results(daily_participant_ratio=0.15, target_vol=10000000, trade_dat
             daily_vwap_lst.append(_value / sum(_vol))
         elif mode == 2:
             # _predictions = _sample_intraday_trend(list(_df['label']), intraday_precision)
-            _predictions = _sample_intraday_trend(trade_date=date)
+            _predictions = _sample_intraday_trend(trade_date=date, test_samples={MKT_TICKERS[0]: [security_id]})
             # for idx, item in enumerate(_predictions[:-1]):
             #     adj_vol.append(_vol[idx] * (1 + intraday_adj) if item > 0.0 else _vol[idx] * (1 - intraday_adj))
 
@@ -147,7 +154,7 @@ def get_sim_results(daily_participant_ratio=0.15, target_vol=10000000, trade_dat
                 if total_vol >= target_vol:
                     adj_vol.append(0)
                     continue
-                #FIXME the prediction result will result in the next min
+                # FIXME the prediction result will result in the next min
                 # _pred = _predictions.get(_min)
 
                 if _pred == 0:
@@ -383,7 +390,7 @@ def simulation_with_intraday_trend(security_id='002415.XSHE', start_date='201911
                                                                      target_vol=target_vol,
                                                                      trade_date=trade_date, mode=mode,
                                                                      intraday_adj=adj_ratio,
-                                                                     df_min=features)
+                                                                     df_min=features, security_id=security_id)
             alpha = [(item - avg_prices[idx]) / avg_prices[idx] * 10000 for idx, item in enumerate(vwap2)]
             df = pd.DataFrame({'tradeDate': dates, 'strategy_vwap': vwap2, 'mkt_vwap': avg_prices, 'alpha(bp)': alpha})
             df.to_csv("case2_report_{0}_{1}.csv".format(adj_ratio, participant_ratio))
@@ -411,7 +418,8 @@ def simulation_with_advance_algorithm(security_id='002180.XSHE', participant_rat
 
 
 if __name__ == '__main__':
-    simulation_with_intraday_trend(security_id='002415.XSHE', start_date='20191125', end_date='20191231',
+    test_samples = get_samples(mode=SAMPLE_MODE, total_num=SAMPLE_NUM, mkt_tickers=MKT_TICKERS)
+    simulation_with_intraday_trend(security_id='000001.XSHE', start_date='20191125', end_date='20191231',
                                    trade_date='2019-12-02',
                                    target_vol=3000000, mode=2)
     # simulation_with_advance_algorithm(security_id='002180.XSHE', participant_ratio=0.15, start_date='20191101',

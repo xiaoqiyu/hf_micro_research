@@ -174,9 +174,9 @@ class lstm(nn.Module):
         return torch.argmax(_distribution, dim=1)
 
 
-def train_lstm(test_date='2019-12-02'):
+def train_lstm(test_date='2019-12-02', security_id='002415.XSHE'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    df = load_features(all_features=True, security_id='002415.XSHE')
+    df = load_features(all_features=True, security_id=security_id)
     train_val_df = df[df.dataDate < test_date]
     test_df = df[df.dataDate == test_date]
 
@@ -247,8 +247,9 @@ def train_lstm(test_date='2019-12-02'):
             if valid_loss and valid_loss[-1] < min_valid_loss:
                 logger.info("Save model in epoch:{0} with valid_loss:{1}".format(i, valid_loss))
                 torch.save({'epoch': i, 'model': rnn, 'train_loss': train_loss,
-                            'valid_loss': valid_loss}, get_full_model_path('LSTM.model'))  # 保存字典对象，里面'model'的value是模型
-                torch.save(optimizer, get_full_model_path('LSTM.optim'))  # 保存优化器
+                            'valid_loss': valid_loss},
+                           get_full_model_path('LSTM_{0}.model'.format(security_id)))  # 保存字典对象，里面'model'的value是模型
+                torch.save(optimizer, get_full_model_path('LSTM_{0}.optim'.format(security_id)))  # 保存优化器
                 min_valid_loss = valid_loss[-1]
         elif VALID_CRITERIER == 'accuracy':
             _accuracy = float(correct_num / total_num)
@@ -261,8 +262,8 @@ def train_lstm(test_date='2019-12-02'):
                                                                                                     best_accuracy))
                 torch.save({'epoch': i, 'model': rnn, 'train_loss': train_loss,
                             'valid_accuracy': _accuracy},
-                           get_full_model_path('LSTM.model'))  # 保存字典对象，里面'model'的value是模型
-                torch.save(optimizer, get_full_model_path('LSTM.optim'))  # 保存优化器
+                           get_full_model_path('LSTM_{0}.model'.format(security_id)))  # 保存字典对象，里面'model'的value是模型
+                torch.save(optimizer, get_full_model_path('LSTM_{0}.optim'.format(security_id)))  # 保存优化器
 
         else:
             logger.warn("Invalid valid_criterier: {0}".format(VALID_CRITERIER))
@@ -272,39 +273,49 @@ def train_lstm(test_date='2019-12-02'):
     plt.plot(train_loss, color='r')
     plt.plot(valid_loss, color='b')
     plt.legend(['train_loss', 'valid_loss'])
-    plt.show()
+    train_loss_track_path = get_full_model_path('train_loss_{0}.jpg'.format(security_id))
+    # plt.show()
+    plt.savefig(train_loss_track_path)
 
 
-def predict_with_lstm(date='2019-12-02', inputs=None):
+def predict_with_lstm(date='2019-12-02', inputs=None, predict_sample={'399005.XSHE': ['002415.XSHE']}):
     if isinstance(inputs, np.ndarray):
         inputs = torch.from_numpy(inputs).float()
         rnn_dict = torch.load(get_full_model_path('LSTM.model'))
         return rnn_dict.get('model').predict(inputs)
-    test_sample = {'399005.XSHE': ['002415.XSHE']}
-    _df = cache_features(start_date=date, end_date=date, test_sample=test_sample, saved=False)
-    _bar_time_lst = _df['barTime'].iloc[:, 0]
-    _del_col = list(set(_df.columns).intersection(
-        {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5',
-         'ma20', 'maDiff20'}))
-    _df.drop(
-        _del_col,
-        axis=1,
-        inplace=True)
-    bar_time_lst = _get_min(_bar_time_lst)
-    _df['barTime'] = bar_time_lst
-    targets = np.array([1 if item >= 0 else 0 for item in _df['label']])  # 2 classes
-    targets = np.array([0 if item < 0 else 1 if item == 0 else 2 for item in _df['label']])  # 3 classes
-    _df = _df.drop(['label', 'dataDate'], axis=1)
-    _df = _feature_preporcessing(_df)
-    val = _df.values
-    _data_loader = _get_ts_loader(val=val, targets=None)
-    x = torch.from_numpy(val).float()
-    _full_model_path = get_full_model_path('LSTM.model')
-    rnn_dict = torch.load(_full_model_path)
-    ret_predicts = rnn_dict.get('model').predict(_data_loader.dataset.float()).numpy()
-    n_predict = ret_predicts.shape[0]
-    correct_num = [1 if item == ret_predicts[idx] else 0 for idx, item in enumerate(targets[-n_predict:])]
-    return dict(zip(_bar_time_lst[-n_predict:], ret_predicts)), float(sum(correct_num) / n_predict)
+    test_sample = predict_sample or {'399005.XSHE': ['002415.XSHE']}
+    from collections import defaultdict
+    ret_labels = defaultdict(dict)
+    ret_accuracy = {}
+    for mkt, sec_ids in test_sample.items():
+        for sec_id in sec_ids:
+            # test for one day
+            _df = cache_features(start_date=date, end_date=date, test_sample={mkt: [sec_id]}, saved=False)
+            _bar_time_lst = _df['barTime'].iloc[:, 0]
+            _del_col = list(set(_df.columns).intersection(
+                {'index', 'exchangeCD', 'ticker', 'barTime', 'barTime.1', 'index.1', 'label5',
+                 'ma20', 'maDiff20'}))
+            _df.drop(
+                _del_col,
+                axis=1,
+                inplace=True)
+            bar_time_lst = _get_min(_bar_time_lst)
+            _df['barTime'] = bar_time_lst
+            targets = np.array([1 if item >= 0 else 0 for item in _df['label']])  # 2 classes
+            targets = np.array([0 if item < 0 else 1 if item == 0 else 2 for item in _df['label']])  # 3 classes
+            _df = _df.drop(['label', 'dataDate'], axis=1)
+            _df = _feature_preporcessing(_df)
+            val = _df.values
+            _data_loader = _get_ts_loader(val=val, targets=None)
+            x = torch.from_numpy(val).float()
+            _full_model_path = get_full_model_path('LSTM_{0}.model'.format(sec_id))
+            rnn_dict = torch.load(_full_model_path)
+            ret_predicts = rnn_dict.get('model').predict(_data_loader.dataset.float()).numpy()
+            n_predict = ret_predicts.shape[0]
+            correct_num = [1 if item == ret_predicts[idx] else 0 for idx, item in enumerate(targets[-n_predict:])]
+            ret_labels.update({sec_id: dict(zip(_bar_time_lst[-n_predict:], ret_predicts))})
+            ret_accuracy.update({sec_id: float(sum(correct_num) / n_predict)})
+    return ret_labels, ret_accuracy
 
 
 if __name__ == '__main__':
@@ -314,6 +325,7 @@ if __name__ == '__main__':
     # x = np.random.random(60 * 49).reshape(3, 20, 49)
     # print(predict_with_lstm(x))
     import pprint
+
     predicts, accuaracy = predict_with_lstm(date='2019-12-03')
     pprint.pprint(predicts)
     pprint.pprint(accuaracy)

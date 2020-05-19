@@ -131,6 +131,8 @@ dmypy.json
 
 # project 
 databk/
+data/
 log.txt
-order_processing/order_processing.py
-draft.py
+order_processing/
+account_info/
+databk/draft.py

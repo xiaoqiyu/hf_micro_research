@@ -21,11 +21,12 @@ from utils.logger import Logger
 from utils.helper import get_full_data_path
 from utils.helper import get_full_data_path
 from utils.helper import get_full_model_path
+from account_info.get_account_info import get_account_info
 
 sns.set()
 logger = Logger().get_log()
 
-uqer_client = uqer.Client(token="26356c6121e2766186977ec49253bf1ec4550ee901c983d9a9bff32f59e6a6fb")
+uqer_client = uqer.Client(token=get_account_info().get('uqer_token'))
 
 REMOVE_TICK_COLS = ['dataDate', 'exchangeCD', 'ticker', 'dataTime', 'barTime', 'shortNM', 'currencyCD', 'askPrice1',
                     'askPrice2',
@@ -57,6 +58,9 @@ def _cal_tick_features(df):
     df['ma20'] = df[['lastPrice']].rolling(20).mean()
     df['maDiff10'] = df['ma5'] - df['ma10']
     df['maDiff20'] = df['ma5'] - df['ma20']
+    # TODO to add
+    # df['smartPrice']  #A variation on mid-price where the average of the bid and ask prices is weighted according to their inverse volume
+    # Trade Sign: A feature measuring whether buyers or sellers crossed the spread more frequently in recent executions
 
     # vol
     df['totalAskVolume'] = df['askVolume1'] + df['askVolume2'] + df['askVolume3'] + df['askVolume4'] + df['askVolume5']
@@ -120,7 +124,7 @@ def _cal_min_features(df_min, window_len=20):
         n_len = len(arr1)
         for i in range(n_len - window_len + 1):
             _r = -1 if i + window_len >= n_len else i + window_len
-            _corr = np.corrcoef(arr1[i:i + _r], arr2[i:i + _r])
+            _corr = np.corrcoef(arr1[i:_r], arr2[i:_r])
             ret.append(_corr[0][1])
         return ret
 
@@ -134,9 +138,10 @@ def _cal_min_features(df_min, window_len=20):
         for i in range(4):
             ret.append(np.nan)
         return ret
+
     # TODO return label by closeprice or vwap??
-    df_min['ret'] = df_min[['closePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1) # return label by closePrice
-    # df_min['ret'] = df_min[['vwap']].rolling(2).apply(lambda x: x[-1] / x[0] - 1) #return label by vwap
+    # df_min['ret'] = df_min[['closePrice']].rolling(2).apply(lambda x: x[-1] / x[0] - 1) # return label by closePrice
+    df_min['ret'] = df_min[['vwap']].rolling(2).apply(lambda x: x[-1] / x[0] - 1)  # return label by vwap
     df_min['retLog'] = df_min[['closePrice']].rolling(2).apply(lambda x: math.log(x[-1]) - math.log(x[0]))
     df_min['retVar'] = df_min[['ret']].rolling(window_len).apply(lambda x: x.var())
     df_min['retSkr'] = df_min[['ret']].rolling(window_len).apply(_get_skr)
@@ -237,6 +242,7 @@ def get_features_by_date(security_id=u"300634.XSHE", date='20191122', min_unit="
     col_before_drop = df_min.columns
     # drop the columns that are all None
     df_min.dropna(axis=1, how='all', inplace=True)
+    # df_min.fillna(axis=1, inplace=True, method='pad')
     # drop the rows that contain None
     df_min.dropna(axis=0, how='any', inplace=True)
     col_after_drop = df_min.columns
@@ -306,9 +312,11 @@ def corr_map(df, fname):
     plt.savefig(get_full_data_path('{0}.jpg'.format(fname)))
 
 
-def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_sample=None, saved=True):
-    test_sample = test_sample or get_samples(mode=0, total_num=sec_num)
+def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_sample=None, saved=True, sample_mode=2,
+                   sample_mkt_tickers=['399001']):
+    test_sample = test_sample or get_samples(mode=sample_mode, total_num=sec_num, mkt_tickers=sample_mkt_tickers)
     # test_sample = {'399005.XSHE': ['002180.XSHE']}
+    # FIXME remove the hardcode of win_len
     for win_len in [10]:
         for k, v in test_sample.items():
             for sec_id in v:
@@ -332,11 +340,9 @@ def cache_features(start_date='20200302', end_date='20200313', sec_num=30, test_
                 _df1 = pd.DataFrame({'label': label})
                 df_corr1 = pd.concat([_df1, df_corr], axis=1)
                 corr_map(df_corr1, fname='{0}_{1}'.format(fname, '1min'))
-
                 _df5 = pd.DataFrame({'label': label5})
                 df_corr5 = pd.concat([_df5, df_corr], axis=1)
                 corr_map(df_corr5, fname='{0}_{1}'.format(fname, '5min'))
-                return df
 
 
 def standadize(arr):
@@ -426,12 +432,12 @@ def get_month_start_end_dates(start_date='', end_date=''):
 
 
 def main():
-    # month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
-    # idx = 0
-    # while idx <= 22:
-    #     logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
-    #     cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
-    #     idx += 2
+    month_start_end_dates = get_month_start_end_dates(start_date='20190104', end_date='20191231')
+    idx = 0
+    while idx <= 22:
+        logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
+        cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
+        idx += 2
     # df = get_features_by_date(security_id=u"002415.XSHE", date='20191202', min_unit="1", tick=True)
     # windows_len_search()
     test_sample = {'399005.XSHE': ['002415.XSHE']}
