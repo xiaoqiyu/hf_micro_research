@@ -168,7 +168,6 @@ def get_sim_results(daily_participant_ratio=0.15, target_vol=10000000, trade_dat
                         "pred result 0, date:{0}, time:{1}, curr vol:{2}, total vol:{3}".format(date, _min, _vol0,
                                                                                                 total_vol))
                 elif _pred == 2:
-
                     _vol2 = int(_tmp_vol * (1 + intraday_adj) / 100) * 100
                     _vol2 = MIN_VOL if _vol2 < MIN_VOL else _vol2
                     if total_vol + _vol2 >= target_vol:
@@ -379,7 +378,6 @@ def get_liquid_results(df_tick, target_vol, ratio, level, price_rule):
 def simulation_with_intraday_trend(security_id='002415.XSHE', start_date='20191125', end_date='20191231',
                                    trade_date='2019-12-02',
                                    target_vol=3000000, mode=2):
-    # case 1&2 report simulation
     features = get_features(security_id=security_id, start_date=start_date, end_date=end_date, min_unit="1")
     sum_alpha = []
     mean_alpha = []

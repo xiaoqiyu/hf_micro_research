@@ -10,6 +10,7 @@
 
 import torch
 import torch.nn as nn
+from collections import defaultdict
 from torch.autograd import Variable
 from torch.nn import utils as nn_utils
 from torch.utils.data import TensorDataset
@@ -279,12 +280,12 @@ def train_lstm(test_date='2019-12-02', security_id='002415.XSHE'):
 
 
 def predict_with_lstm(date='2019-12-02', inputs=None, predict_sample={'399005.XSHE': ['002415.XSHE']}):
+    # for quick testing for prediction
     if isinstance(inputs, np.ndarray):
         inputs = torch.from_numpy(inputs).float()
         rnn_dict = torch.load(get_full_model_path('LSTM.model'))
         return rnn_dict.get('model').predict(inputs)
     test_sample = predict_sample or {'399005.XSHE': ['002415.XSHE']}
-    from collections import defaultdict
     ret_labels = defaultdict(dict)
     ret_accuracy = {}
     for mkt, sec_ids in test_sample.items():
