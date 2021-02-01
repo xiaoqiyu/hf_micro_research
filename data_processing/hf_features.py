@@ -438,13 +438,17 @@ def main():
         logger.info("cache features from {0} to {1}".format(month_start_end_dates[idx], month_start_end_dates[idx + 1]))
         cache_features(start_date=month_start_end_dates[idx], end_date=month_start_end_dates[idx + 1], sec_num=10)
         idx += 2
+
+    # get features by date
     # df = get_features_by_date(security_id=u"002415.XSHE", date='20191202', min_unit="1", tick=True)
     # windows_len_search()
-    test_sample = {'399005.XSHE': ['002415.XSHE']}
-    df = cache_features(start_date='2019-12-02', end_date='2019-12-02', test_sample=test_sample)
-    print(df.shape)
-    print(df.head(5))
 
+    # get features for one month
+    # test_sample = {'399005.XSHE': ['002415.XSHE']}
+    # df = cache_features(start_date='2019-12-02', end_date='2019-12-02', test_sample=test_sample)
+    # print(df.shape)
+    # print(df.head(5))
+    #
 
 if __name__ == '__main__':
     main()

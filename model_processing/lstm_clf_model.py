@@ -28,6 +28,8 @@ from utils.helper import get_full_data_path
 from utils.helper import get_full_model_path
 from data_processing.hf_features import cache_features
 
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
+
 logger = Logger().get_log()
 #
 
@@ -35,10 +37,10 @@ logger = Logger().get_log()
 INPUT_SIZE = 49  # 定义输入的特征数
 HIDDEN_SIZE = 32  # 定义一个LSTM单元有多少个神经元
 BATCH_SIZE = 32  # batch
-EPOCH = 20  # 学习次数
+EPOCH = 20 # 学习次数
 LR = 0.001  # 学习率
 TIME_STEP = 20  # 步长，一般用不上，写出来就是给自己看的
-DROP_RATE = 0.2  # drop out概率
+DROP_RATE = 0.2 # drop out概率
 LAYERS = 4  # 有多少隐层，一个隐层一般放一个LSTM单元
 MODEL = 'LSTM'  # 模型名字
 # the valid criterier could be cross_entropy_loss or accuracy, this only applies for valid, not for training
@@ -99,6 +101,7 @@ def load_features(all_features=False, security_id=None):
             lst.append(_df)
     df = pd.concat(lst)
     all_feature_path = get_full_data_path('all_features_{0}.csv'.format(security_id))
+    logger.info("Save all feature for security id:{0} to path:{1}".format(security_id, all_feature_path))
     df.to_csv(all_feature_path)
     return df
 
@@ -175,9 +178,9 @@ class lstm(nn.Module):
         return torch.argmax(_distribution, dim=1)
 
 
-def train_lstm(test_date='2019-12-02', security_id='002415.XSHE'):
+def train_lstm(test_date='2019-12-02', security_id='002415.XSHE', all_features=True):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    df = load_features(all_features=True, security_id=security_id)
+    df = load_features(all_features=all_features, security_id=security_id)
     train_val_df = df[df.dataDate < test_date]
     test_df = df[df.dataDate == test_date]
 
@@ -193,7 +196,7 @@ def train_lstm(test_date='2019-12-02', security_id='002415.XSHE'):
     for i in range(EPOCH):
         total_train_loss = []
         rnn.train()  # 进入训练模式
-        train_loader, valid_loader = get_dataloader(train_ratio=0.7, df=train_val_df)
+        train_loader, valid_loader = get_dataloader(train_ratio=0.5, df=train_val_df)
         for step, item in enumerate(train_loader):
             # lr = set_lr(optimizer, i, EPOCH, LR)
             nx, ny, nz = item.shape
@@ -276,7 +279,9 @@ def train_lstm(test_date='2019-12-02', security_id='002415.XSHE'):
     plt.legend(['train_loss', 'valid_loss'])
     train_loss_track_path = get_full_model_path('train_loss_{0}.jpg'.format(security_id))
     # plt.show()
+    logger.info('Save train result figure to :{0}'.format(train_loss_track_path))
     plt.savefig(train_loss_track_path)
+    print('end')
 
 
 def predict_with_lstm(date='2019-12-02', inputs=None, predict_sample={'399005.XSHE': ['002415.XSHE']}):
@@ -320,13 +325,13 @@ def predict_with_lstm(date='2019-12-02', inputs=None, predict_sample={'399005.XS
 
 
 if __name__ == '__main__':
-    # load_features(all_features=True, security_id='002415.XSHE')
+    # load_features(all_features=True, security_id='000006.XSHE')
     # get_dataloader()
-    # train_lstm()
+    train_lstm(test_date='2019-03-29', security_id='000006.XSHE', all_features=True)
     # x = np.random.random(60 * 49).reshape(3, 20, 49)
     # print(predict_with_lstm(x))
-    import pprint
+    # import pprint
 
-    predicts, accuaracy = predict_with_lstm(date='2019-12-03')
-    pprint.pprint(predicts)
-    pprint.pprint(accuaracy)
+    # predicts, accuaracy = predict_with_lstm(date='2019-12-03')
+    # pprint.pprint(predicts)
+    # pprint.pprint(accuaracy)
